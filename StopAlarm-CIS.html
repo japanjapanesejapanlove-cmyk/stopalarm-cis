@@ -122,6 +122,12 @@
       margin-bottom: 12px;
     }
 
+    .section-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin: 0 0 8px;
+    }
+
     .row {
       display: flex;
       gap: 8px;
@@ -199,16 +205,26 @@
 
     .map-box {
       position: relative;
-      height: 270px;
+      height: 250px;
       border-radius: 14px;
       overflow: hidden;
       border: 1px solid var(--border);
       background: #0f172a;
+      display: grid;
+      place-items: center;
     }
 
     #map {
       width: 100%;
       height: 100%;
+      z-index: 1;
+    }
+
+    .map-fallback {
+      text-align: center;
+      padding: 16px;
+      color: var(--muted);
+      font-size: 13px;
     }
 
     .gps-float-btn {
@@ -304,6 +320,20 @@
       color: var(--warn);
     }
 
+    .alarm-banner {
+      background: rgba(239, 68, 68, 0.16);
+      border: 1px solid rgba(239, 68, 68, 0.45);
+      color: #fecaca;
+      border-radius: 14px;
+      padding: 12px;
+      margin-bottom: 12px;
+      display: none;
+    }
+
+    .alarm-banner.show {
+      display: block;
+    }
+
     .bottom-nav {
       position: fixed;
       left: 0;
@@ -338,4 +368,594 @@
 
     .nav-btn.active {
       color: var(--accent);
-     </html>.
+      background: rgba(56, 189, 248, 0.12);
+    }
+
+    .page {
+      display: none;
+    }
+
+    .page.active {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <div class="brand">
+        <div class="brand-icon">🚏</div>
+        <div>
+          <div class="brand-title">
+            StopAlarm СНГ
+            <span class="badge" id="tierBadge">LITE</span>
+          </div>
+          <div class="brand-sub" id="citySubtitle">Кызылорда · Умный будильник у остановки</div>
+        </div>
+      </div>
+      <div class="status-pill" id="watchStatus">Ожидание</div>
+    </div>
+
+    <div class="alarm-banner" id="alarmBanner">
+      <div style="font-weight: 800; font-size: 15px;">🔔 Пора готовиться к выходу!</div>
+      <div class="muted" id="alarmText" style="color: #fee2e2; margin-top: 4px;">Вы приблизились к выбранной остановке.</div>
+      <div class="row" style="margin-top: 10px;">
+        <button class="danger" id="stopAlarmBtn" style="flex: 1;">Выключить сигнал</button>
+        <button id="snoozeAlarmBtn" style="flex: 1;">Ещё 300 м</button>
+      </div>
+    </div>
+
+    <div class="page active" id="page-map">
+      <div class="card">
+        <div class="section-title">Город и остановка назначения</div>
+        <div class="row">
+          <select id="citySelect"></select>
+          <select id="stopSelect"></select>
+        </div>
+        <div class="row wrap" style="margin-top: 10px;">
+          <button class="chip active" data-radius="400">400 м</button>
+          <button class="chip" data-radius="700">700 м</button>
+          <button class="chip" data-radius="1200">1.2 км</button>
+          <button class="chip" data-radius="2000">2 км</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="map-box">
+          <div id="map"></div>
+          <button class="primary gps-float-btn" id="centerBtn">📍 Моё место</button>
+        </div>
+
+        <div class="grid-3">
+          <div class="mini-box">
+            <div class="mini-label">До остановки</div>
+            <div class="mini-val" id="distVal">— м</div>
+          </div>
+          <div class="mini-box">
+            <div class="mini-label">Радиус тревоги</div>
+            <div class="mini-val" id="radVal">400 м</div>
+          </div>
+          <div class="mini-box">
+            <div class="mini-label">Скорость</div>
+            <div class="mini-val" id="speedVal">0 км/ч</div>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top: 12px;">
+          <button class="success" id="toggleWatchBtn" style="flex: 1;">▶ Запустить контроль</button>
+          <button id="testAlarmBtn">🔔 Тест</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="page" id="page-sim">
+      <div class="card">
+        <div class="section-title">Симулятор поездки (без выезда из дома)</div>
+        <div class="muted">Проверь срабатывание будильника заранее: виртуальный транспорт двигается к выбранной остановке.</div>
+        <div class="big-stat" id="simDistLabel">— м до цели</div>
+        <div class="row">
+          <button class="primary" id="simStartBtn" style="flex: 1;">▶ Старт симуляции</button>
+          <button id="simStepBtn">+150 м</button>
+          <button class="danger" id="simResetBtn">Сброс</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="page" id="page-favs">
+      <div class="card">
+        <div class="section-title">Остановки выбранного города</div>
+        <div id="allStopsList"></div>
+      </div>
+      <div class="card">
+        <div class="section-title">Избранные остановки</div>
+        <div id="favStopsList"></div>
+      </div>
+    </div>
+
+    <div class="page" id="page-log">
+      <div class="card">
+        <div class="section-title">Режим и звук</div>
+        <div class="mode-tabs">
+          <div class="mode-tab active" data-sound="beep">🔊 Звуковой сигнал</div>
+          <div class="mode-tab" data-sound="vibe">📳 Только вибрация</div>
+        </div>
+        <div class="row">
+          <button class="pro-btn" id="toggleProBtn" style="flex: 1;">✨ Переключить LITE / PRO</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">Журнал поездок и срабатываний</div>
+        <div id="logList"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottom-nav">
+    <div class="bottom-nav-inner">
+      <button class="nav-btn active" data-page="page-map">🗺️<span>Карта</span></button>
+      <button class="nav-btn" data-page="page-sim">🚌<span>Симулятор</span></button>
+      <button class="nav-btn" data-page="page-favs">⭐<span>Остановки</span></button>
+      <button class="nav-btn" data-page="page-log">📋<span>Журнал</span></button>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const CITIES = {
+      kyzylorda: {
+        name: "Кызылорда",
+        center: [44.8479, 65.5093],
+        stops: [
+          { id: "kz-1", name: "Центральный рынок / Старый базар", lat: 44.8525, lng: 65.5021 },
+          { id: "kz-2", name: "ТЦ Арай / Мега Арена", lat: 44.8398, lng: 65.5246 },
+          { id: "kz-3", name: "Железнодорожный вокзал", lat: 44.8321, lng: 65.4894 },
+          { id: "kz-4", name: "Микрорайон Мерей", lat: 44.8612, lng: 65.5188 }
+        ]
+      },
+      almaty: {
+        name: "Алматы",
+        center: [43.2389, 76.8897],
+        stops: [
+          { id: "alm-1", name: "ст. м. Байконур", lat: 43.2508, lng: 76.9154 },
+          { id: "alm-2", name: "Зелёный базар", lat: 43.2662, lng: 76.9547 },
+          { id: "alm-3", name: "Алматы-1 Вокзал", lat: 43.3372, lng: 76.9429 }
+        ]
+      },
+      astana: {
+        name: "Астана",
+        center: [51.1694, 71.4491],
+        stops: [
+          { id: "ast-1", name: "ТЦ Хан Шатыр", lat: 51.1325, lng: 71.4037 },
+          { id: "ast-2", name: "Байтерек", lat: 51.1282, lng: 71.4304 },
+          { id: "ast-3", name: "Вокзал Нурлы Жол", lat: 51.1489, lng: 71.5312 }
+        ]
+      },
+      tashkent: {
+        name: "Ташкент",
+        center: [41.2995, 69.2401],
+        stops: [
+          { id: "tash-1", name: "Чорсу базар", lat: 41.3268, lng: 69.2348 },
+          { id: "tash-2", name: "Ташкент Сити", lat: 41.3125, lng: 69.2484 },
+          { id: "tash-3", name: "Северный вокзал", lat: 41.3106, lng: 69.2912 }
+        ]
+      }
+    }    const state = {
+      cityKey: "kyzylorda",
+      stopId: "kz-1",
+      radius: 400,
+      watching: false,
+      isPro: false,
+      soundMode: "beep",
+      userPos: null,
+      watchId: null,
+      simTimer: null,
+      simDist: 1400,
+      favs: JSON.parse(localStorage.getItem("stopalarm_favs") || "[]"),
+      logs: JSON.parse(localStorage.getItem("stopalarm_logs") || "[]"),
+      alarmActive: false
+    };
+
+    let map = null;
+    let userMarker = null;
+    let stopMarker = null;
+    let radiusCircle = null;
+    let audioCtx = null;
+    let beepInterval = null;
+
+    function haversineMeters(lat1, lon1, lat2, lon2) {
+      const R = 6371000;
+      const toRad = (d) => (d * Math.PI) / 180;
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    function getCurrentCity() {
+      return CITIES[state.cityKey] || CITIES.kyzylorda;
+    }
+
+    function getCurrentStop() {
+      const city = getCurrentCity();
+      return city.stops.find((s) => s.id === state.stopId) || city.stops[0];
+    }
+
+    function saveData() {
+      localStorage.setItem("stopalarm_favs", JSON.stringify(state.favs));
+      localStorage.setItem("stopalarm_logs", JSON.stringify(state.logs.slice(0, 25)));
+    }
+
+    function addLog(text) {
+      const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      state.logs.unshift({ time: now, text });
+      saveData();
+      renderLogs();
+    }
+
+    function playBeep() {
+      if (state.soundMode === "vibe") {
+        if (navigator.vibrate) navigator.vibrate([300, 150, 300]);
+        return;
+      }
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.25);
+        if (navigator.vibrate) navigator.vibrate([250, 120, 250]);
+      } catch (_) {}
+    }
+
+    function triggerAlarm(stopName, dist) {
+      if (state.alarmActive) return;
+      state.alarmActive = true;
+      document.getElementById("alarmBanner").classList.add("show");
+      document.getElementById("alarmText").textContent =
+        `Остановка «${stopName}» — осталось примерно ${Math.round(dist)} м.`;
+      playBeep();
+      beepInterval = setInterval(playBeep, 1800);
+      addLog(`Тревога у «${stopName}» (${Math.round(dist)} м)`);
+    }
+
+    function stopAlarm() {
+      state.alarmActive = false;
+      document.getElementById("alarmBanner").classList.remove("show");
+      if (beepInterval) {
+        clearInterval(beepInterval);
+        beepInterval = null;
+      }
+    }
+
+    function initMap() {
+      if (typeof L === "undefined") {
+        document.getElementById("map").innerHTML =
+          '<div class="map-fallback">Карта загружается без внешнего тайл-сервера — дистанция и тревога работают.</div>';
+        return;
+      }
+      const city = getCurrentCity();
+      map = L.map("map", { zoomControl: false }).setView(city.center, 13);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "© OSM"
+      }).addTo(map);
+      updateMapMarkers();
+    }
+
+    function updateMapMarkers() {
+      const stop = getCurrentStop();
+      if (!map || typeof L === "undefined") return;
+
+      if (stopMarker) map.removeLayer(stopMarker);
+      if (radiusCircle) map.removeLayer(radiusCircle);
+
+      stopMarker = L.marker([stop.lat, stop.lng]).addTo(map).bindPopup(stop.name);
+      radiusCircle = L.circle([stop.lat, stop.lng], {
+        radius: state.radius,
+        color: "#38bdf8",
+        fillColor: "#38bdf8",
+        fillOpacity: 0.16
+      }).addTo(map);
+
+      if (state.userPos) {
+        if (!userMarker) {
+          userMarker = L.circleMarker([state.userPos.lat, state.userPos.lng], {
+            radius: 7,
+            color: "#fff",
+            fillColor: "#22c55e",
+            fillOpacity: 1
+          }).addTo(map);
+        } else {
+          userMarker.setLatLng([state.userPos.lat, state.userPos.lng]);
+        }
+      }
+
+      map.setView([stop.lat, stop.lng], 13);
+    }
+
+    function refreshUI() {
+      const city = getCurrentCity();
+      const stop = getCurrentStop();
+
+      document.getElementById("citySubtitle").textContent =
+        `${city.name} · Умный будильник у остановки`;
+      document.getElementById("radVal").textContent =
+        state.radius >= 1000 ? `${(state.radius / 1000).toFixed(1)} км` : `${state.radius} м`;
+
+      const badge = document.getElementById("tierBadge");
+      badge.textContent = state.isPro ? "PRO" : "LITE";
+      badge.className = state.isPro ? "badge pro" : "badge";
+
+      const status = document.getElementById("watchStatus");
+      status.textContent = state.watching ? "Контроль вкл." : "Ожидание";
+      status.className = state.watching ? "status-pill active" : "status-pill";
+
+      document.getElementById("toggleWatchBtn").textContent =
+        state.watching ? "⏹ Остановить контроль" : "▶ Запустить контроль";
+
+      let distText = "— м";
+      if (state.userPos) {
+        const d = haversineMeters(state.userPos.lat, state.userPos.lng, stop.lat, stop.lng);
+        distText = d >= 1000 ? `${(d / 1000).toFixed(2)} км` : `${Math.round(d)} м`;
+        if (state.watching && d <= state.radius) {
+          triggerAlarm(stop.name, d);
+        }
+      }
+      document.getElementById("distVal").textContent = distText;
+      document.getElementById("simDistLabel").textContent =
+        `${Math.max(0, Math.round(state.simDist))} м до «${stop.name}»`;
+
+      renderStopsLists();
+      renderLogs();
+    }
+
+    function renderStopsLists() {
+      const city = getCurrentCity();
+      const allBox = document.getElementById("allStopsList");
+      const favBox = document.getElementById("favStopsList");
+
+      allBox.innerHTML = city.stops
+        .map((s) => {
+          const isFav = state.favs.includes(s.id);
+          return `
+            <div class="stop-item">
+              <div onclick="selectStop('${s.id}')" style="cursor:pointer; flex:1;">
+                <div style="font-weight:700; font-size:14px;">${s.name}</div>
+                <div class="muted">${city.name}</div>
+              </div>
+              <button class="star-btn ${isFav ? "fav" : ""}" onclick="toggleFav('${s.id}')">${isFav ? "★" : "☆"}</button>
+            </div>
+          `;
+        })
+        .join("");
+
+      const favItems = [];
+      Object.values(CITIES).forEach((c) => {
+        c.stops.forEach((s) => {
+          if (state.favs.includes(s.id)) favItems.push({ ...s, cityName: c.name });
+        });
+      });
+
+      favBox.innerHTML = favItems.length
+        ? favItems
+            .map(
+              (s) => `
+              <div class="stop-item">
+                <div onclick="selectStop('${s.id}')" style="cursor:pointer; flex:1;">
+                  <div style="font-weight:700; font-size:14px;">${s.name}</div>
+                  <div class="muted">${s.cityName}</div>
+                </div>
+                <button class="star-btn fav" onclick="toggleFav('${s.id}')">★</button>
+              </div>
+            `
+            )
+            .join("")
+        : '<div class="muted" style="margin-top:8px;">Пока нет избранных остановок. Нажми ☆ рядом с нужной.</div>';
+    }
+
+    function renderLogs() {
+      const box = document.getElementById("logList");
+      box.innerHTML = state.logs.length
+        ? state.logs
+            .map(
+              (item) => `
+              <div class="log-item">
+                <span style="font-size:13px;">${item.text}</span>
+                <span class="muted">${item.time}</span>
+              </div>
+            `
+            )
+            .join("")
+        : '<div class="muted" style="margin-top:8px;">Записей пока нет.</div>';
+    }
+
+    window.toggleFav = function (stopId) {
+      if (state.favs.includes(stopId)) {
+        state.favs = state.favs.filter((id) => id !== stopId);
+      } else {
+        state.favs.push(stopId);
+      }
+      saveData();
+      refreshUI();
+    };
+
+    window.selectStop = function (stopId) {
+      state.stopId = stopId;
+      document.getElementById("stopSelect").value = stopId;
+      updateMapMarkers();
+      refreshUI();
+      switchPage("page-map");
+    };
+
+    function switchPage(pageId) {
+      document.querySelectorAll(".page").forEach((p) => p.classList.remove("active"));
+      document.getElementById(pageId).classList.add("active");
+      document.querySelectorAll(".nav-btn").forEach((b) => {
+        b.classList.toggle("active", b.dataset.page === pageId);
+      });
+      if (pageId === "page-map" && map) {
+        setTimeout(() => map.invalidateSize(), 120);
+      }
+    }
+
+    function populateSelects() {
+      const citySel = document.getElementById("citySelect");
+      citySel.innerHTML = Object.entries(CITIES)
+        .map(([key, c]) => `<option value="${key}">${c.name}</option>`)
+        .join("");
+      citySel.value = state.cityKey;
+      populateStopsSelect();
+    }
+
+    function populateStopsSelect() {
+      const city = getCurrentCity();
+      const stopSel = document.getElementById("stopSelect");
+      stopSel.innerHTML = city.stops
+        .map((s) => `<option value="${s.id}">${s.name}</option>`)
+        .join("");
+      if (!city.stops.some((s) => s.id === state.stopId)) {
+        state.stopId = city.stops[0].id;
+      }
+      stopSel.value = state.stopId;
+    }
+
+    function toggleWatch() {
+      state.watching = !state.watching;
+      if (state.watching && navigator.geolocation) {
+        addLog(`Включён контроль у «${getCurrentStop().name}»`);
+        state.watchId = navigator.geolocation.watchPosition(
+          (pos) => {
+            state.userPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            const speedKmh = pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0;
+            document.getElementById("speedVal").textContent = `${speedKmh} км/ч`;
+            updateMapMarkers();
+            refreshUI();
+          },
+          () => refreshUI(),
+          { enableHighAccuracy: true, maximumAge: 3000 }
+        );
+      } else if (state.watchId !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(state.watchId);
+        state.watchId = null;
+      }
+      refreshUI();
+    }
+
+    document.getElementById("citySelect").addEventListener("change", (e) => {
+      state.cityKey = e.target.value;
+      populateStopsSelect();
+      updateMapMarkers();
+      refreshUI();
+    });
+
+    document.getElementById("stopSelect").addEventListener("change", (e) => {
+      state.stopId = e.target.value;
+      updateMapMarkers();
+      refreshUI();
+    });
+
+    document.querySelectorAll("[data-radius]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        state.radius = Number(btn.dataset.radius);
+        document.querySelectorAll("[data-radius]").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        updateMapMarkers();
+        refreshUI();
+      });
+    });
+
+    document.querySelectorAll(".nav-btn").forEach((btn) => {
+      btn.addEventListener("click", () => switchPage(btn.dataset.page));
+    });
+
+    document.getElementById("toggleWatchBtn").addEventListener("click", toggleWatch);
+    document.getElementById("testAlarmBtn").addEventListener("click", () => {
+      triggerAlarm(getCurrentStop().name, state.radius);
+    });
+    document.getElementById("stopAlarmBtn").addEventListener("click", stopAlarm);
+    document.getElementById("snoozeAlarmBtn").addEventListener("click", () => {
+      stopAlarm();
+      state.radius = Math.max(200, state.radius - 100);
+      updateMapMarkers();
+      refreshUI();
+    });
+
+    document.getElementById("centerBtn").addEventListener("click", () => {
+      if (!navigator.geolocation) return;
+      navigator.geolocation.getCurrentPosition((pos) => {
+        state.userPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        updateMapMarkers();
+        if (map) map.setView([state.userPos.lat, state.userPos.lng], 15);
+        refreshUI();
+      });
+    });
+
+    document.getElementById("simStartBtn").addEventListener("click", () => {
+      if (state.simTimer) {
+        clearInterval(state.simTimer);
+        state.simTimer = null;
+        document.getElementById("simStartBtn").textContent = "▶ Старт симуляции";
+        return;
+      }
+      document.getElementById("simStartBtn").textContent = "⏸ Пауза";
+      state.simTimer = setInterval(() => {
+        state.simDist = Math.max(0, state.simDist - 120);
+        document.getElementById("speedVal").textContent = "36 км/ч";
+        if (state.simDist <= state.radius) {
+          triggerAlarm(getCurrentStop().name, state.simDist);
+        }
+        if (state.simDist === 0) {
+          clearInterval(state.simTimer);
+          state.simTimer = null;
+          document.getElementById("simStartBtn").textContent = "▶ Старт симуляции";
+        }
+        refreshUI();
+      }, 900);
+    });
+
+    document.getElementById("simStepBtn").addEventListener("click", () => {
+      state.simDist = Math.max(0, state.simDist - 150);
+      if (state.simDist <= state.radius) {
+        triggerAlarm(getCurrentStop().name, state.simDist);
+      }
+      refreshUI();
+    });
+
+    document.getElementById("simResetBtn").addEventListener("click", () => {
+      if (state.simTimer) {
+        clearInterval(state.simTimer);
+        state.simTimer = null;
+      }
+      state.simDist = 1400;
+      document.getElementById("simStartBtn").textContent = "▶ Старт симуляции";
+      stopAlarm();
+      refreshUI();
+    });
+
+    document.querySelectorAll("[data-sound]").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        state.soundMode = tab.dataset.sound;
+        document.querySelectorAll("[data-sound]").forEach((t) => t.classList.remove("active"));
+        tab.classList.add("active");
+      });
+    });
+
+    document.getElementById("toggleProBtn").addEventListener("click", () => {
+      state.isPro = !state.isPro;
+      refreshUI();
+    });
+
+    populateSelects();
+    initMap();
+    refreshUI();
+  </script>
+</body>
+</html>
